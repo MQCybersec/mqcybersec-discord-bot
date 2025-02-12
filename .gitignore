@@ -1,0 +1,5 @@
+.env
+ctf_bot.db
+__pycache__/
+.venv/
+logs/

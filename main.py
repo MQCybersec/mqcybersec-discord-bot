@@ -43,10 +43,55 @@ intents.members = True
 intents.message_content = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 
+import traceback
+from typing import List, Dict, Optional, Set
+from discord import Permissions
+
+def check_permissions(guild: discord.Guild, bot_member: discord.Member, required_permissions: List[str]) -> Dict[str, bool]:
+    """
+    Check if the bot has the required permissions in the guild
+    Returns a dictionary of permission name to boolean indicating if the bot has that permission
+    """
+    permission_mapping = {
+        'manage_roles': Permissions.manage_roles,
+        'manage_channels': Permissions.manage_channels,
+        'view_channel': Permissions.view_channel,
+        'send_messages': Permissions.send_messages,
+        'embed_links': Permissions.embed_links,
+        'attach_files': Permissions.attach_files,
+        'add_reactions': Permissions.add_reactions,
+        'use_external_emojis': Permissions.use_external_emojis,
+        'manage_messages': Permissions.manage_messages,
+        'read_message_history': Permissions.read_message_history,
+        'mention_everyone': Permissions.mention_everyone,
+        'create_public_threads': Permissions.create_public_threads,
+        'send_messages_in_threads': Permissions.send_messages_in_threads,
+    }
+    
+    results = {}
+    for perm in required_permissions:
+        if perm in permission_mapping:
+            has_perm = bot_member.guild_permissions.value & permission_mapping[perm].flag != 0
+            results[perm] = has_perm
+    
+    return results
+
+
 # COMMANDS
 
 @bot.tree.command(name="ctfinfo", description="Get details about a CTF time event", guild=discord.Object(id=GUILD_ID))
 async def ctftime(interaction: discord.Interaction, url: str):
+    required_permissions = ['view_channel', 'send_messages', 'embed_links']
+    
+    # Check permissions
+    perm_check = check_permissions(interaction.guild, interaction.guild.me, required_permissions)
+    missing_perms = [perm for perm, has_perm in perm_check.items() if not has_perm]
+    
+    if missing_perms:
+        logger.error(f"Missing permissions for ctfinfo command: {', '.join(missing_perms)}")
+        await interaction.response.send_message(f"Bot is missing required permissions: {', '.join(missing_perms)}", ephemeral=True)
+        return
+
     logger.info(f"Command 'ctfinfo' used by {interaction.user.name}#{interaction.user.discriminator} (ID: {interaction.user.id})")
     await interaction.response.defer()
     
@@ -87,6 +132,21 @@ async def setup_ctf(
     url: str,
     channel: discord.TextChannel = None
 ):
+    required_permissions = [
+        'manage_roles', 'manage_channels', 'view_channel', 
+        'send_messages', 'embed_links', 'add_reactions',
+        'create_public_threads', 'send_messages_in_threads'
+    ]
+    
+    # Check permissions
+    perm_check = check_permissions(interaction.guild, interaction.guild.me, required_permissions)
+    missing_perms = [perm for perm, has_perm in perm_check.items() if not has_perm]
+    
+    if missing_perms:
+        logger.error(f"Missing permissions for setupctf command: {', '.join(missing_perms)}")
+        await interaction.response.send_message(f"Bot is missing required permissions: {', '.join(missing_perms)}", ephemeral=True)
+        return
+
     logger.info(f"Command 'setupctf' used by {interaction.user.name}#{interaction.user.discriminator} (ID: {interaction.user.id})")
     try:
         if not interaction.user.guild_permissions.manage_roles:
@@ -135,10 +195,15 @@ async def setup_ctf(
                     send_messages_in_threads=True
                 ),
                 interaction.guild.me: discord.PermissionOverwrite(
+                    view_channel=True,
                     read_messages=True,
                     send_messages=True,
                     create_public_threads=True,
-                    send_messages_in_threads=True
+                    send_messages_in_threads=True,
+                    embed_links=True,
+                    attach_files=True,
+                    add_reactions=True,
+                    manage_messages=True
                 )
             }
             ctf_channel = await interaction.guild.create_text_channel(
@@ -207,6 +272,17 @@ async def publish_ctf(
     channel: discord.TextChannel,
     visible_role: discord.Role = None
 ):
+    required_permissions = ['manage_roles', 'manage_channels', 'view_channel', 'send_messages']
+    
+    # Check permissions
+    perm_check = check_permissions(interaction.guild, interaction.guild.me, required_permissions)
+    missing_perms = [perm for perm, has_perm in perm_check.items() if not has_perm]
+    
+    if missing_perms:
+        logger.error(f"Missing permissions for publishctf command: {', '.join(missing_perms)}")
+        await interaction.response.send_message(f"Bot is missing required permissions: {', '.join(missing_perms)}", ephemeral=True)
+        return
+
     logger.info(f"Command 'publishctf' used by {interaction.user.name}#{interaction.user.discriminator} (ID: {interaction.user.id})")
     try:
         if not interaction.user.guild_permissions.manage_roles:
@@ -282,8 +358,18 @@ async def publish_ctf(
     guild=discord.Object(id=GUILD_ID)
 )
 async def weekend_ctfs(interaction: discord.Interaction):
-    logger.info(f"Command 'weekend' used by {interaction.user.name}#{interaction.user.discriminator} (ID: {interaction.user.id})")
+    required_permissions = ['view_channel', 'send_messages', 'embed_links']
     
+    # Check permissions
+    perm_check = check_permissions(interaction.guild, interaction.guild.me, required_permissions)
+    missing_perms = [perm for perm, has_perm in perm_check.items() if not has_perm]
+    
+    if missing_perms:
+        logger.error(f"Missing permissions for weekendctfs command: {', '.join(missing_perms)}")
+        await interaction.response.send_message(f"Bot is missing required permissions: {', '.join(missing_perms)}", ephemeral=True)
+        return
+
+    logger.info(f"Command 'weekendctfs' used by {interaction.user.name}#{interaction.user.discriminator} (ID: {interaction.user.id})")
     try:
         await interaction.response.defer()
         
@@ -335,36 +421,67 @@ async def weekend_ctfs(interaction: discord.Interaction):
 
 @bot.event
 async def on_raw_reaction_add(payload):
-    if payload.message_id in bot.reaction_roles:
-        role_info = bot.reaction_roles[payload.message_id]
-        if str(payload.emoji) == role_info['emoji']:
-            guild = bot.get_guild(payload.guild_id)
-            role = guild.get_role(role_info['role_id'])
-            member = guild.get_member(payload.user_id)
-            
-            if member and not member.bot:
-                logger.info(f"Reaction added by {member.name}#{member.discriminator} (ID: {member.id}) for message {payload.message_id}")
-                await member.add_roles(role)
+    try:
+        if payload.message_id in bot.reaction_roles:
+            role_info = bot.reaction_roles[payload.message_id]
+            if str(payload.emoji) == role_info['emoji']:
+                guild = bot.get_guild(payload.guild_id)
+                role = guild.get_role(role_info['role_id'])
+                member = guild.get_member(payload.user_id)
+                
+                if member and not member.bot:
+                    logger.info(f"Reaction added by {member.name}#{member.discriminator} (ID: {member.id}) for message {payload.message_id}")
+                    await member.add_roles(role)
+    except Exception as e:
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"Error in on_raw_reaction_add:\n{error_traceback}")
+
 
 @bot.event
 async def on_raw_reaction_remove(payload):
-    if payload.message_id in bot.reaction_roles:
-        role_info = bot.reaction_roles[payload.message_id]
-        if str(payload.emoji) == role_info['emoji']:
-            guild = bot.get_guild(payload.guild_id)
-            role = guild.get_role(role_info['role_id'])
-            member = guild.get_member(payload.user_id)
-            
-            if member and not member.bot:
-                logger.info(f"Reaction removed by {member.name}#{member.discriminator} (ID: {member.id}) for message {payload.message_id}")
-                await member.remove_roles(role)
+    try:
+        if payload.message_id in bot.reaction_roles:
+            role_info = bot.reaction_roles[payload.message_id]
+            if str(payload.emoji) == role_info['emoji']:
+                guild = bot.get_guild(payload.guild_id)
+                role = guild.get_role(role_info['role_id'])
+                member = guild.get_member(payload.user_id)
+                
+                if member and not member.bot:
+                    logger.info(f"Reaction removed by {member.name}#{member.discriminator} (ID: {member.id}) for message {payload.message_id}")
+                    await member.remove_roles(role)
+    except Exception as e:
+            error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+            logger.error(f"Error in on_raw_reaction_remove:\n{error_traceback}")
 
 @bot.event
 async def on_ready():
-    setup_database()
-    bot.reaction_roles = load_reaction_roles()
-    await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-    logger.info(f'Bot logged in as {bot.user}')
-    logger.info(f'Loaded {len(bot.reaction_roles)} reaction roles from database')
+    try:
+        setup_database()
+        bot.reaction_roles = load_reaction_roles()
+        await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+        logger.info(f'Bot logged in as {bot.user}')
+        logger.info(f'Loaded {len(bot.reaction_roles)} reaction roles from database')
+        
+        # Check all required permissions on startup
+        guild = bot.get_guild(GUILD_ID)
+        if guild:
+            all_permissions = [
+                'manage_roles', 'manage_channels', 'view_channel', 
+                'send_messages', 'embed_links', 'add_reactions',
+                'use_external_emojis', 'manage_messages', 'read_message_history',
+                'create_public_threads', 'send_messages_in_threads'
+            ]
+            
+            perm_check = check_permissions(guild, guild.me, all_permissions)
+            missing_perms = [perm for perm, has_perm in perm_check.items() if not has_perm]
+            
+            if missing_perms:
+                logger.warning(f"Bot is missing the following permissions: {', '.join(missing_perms)}")
+            else:
+                logger.info("All required permissions are granted")
+    except Exception as e:
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"Error in on_ready:\n{error_traceback}")
 
 bot.run(TOKEN)

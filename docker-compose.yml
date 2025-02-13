@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./ctf_bot.db:/app/ctf_bot.db
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1

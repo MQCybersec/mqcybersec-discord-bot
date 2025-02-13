@@ -2,7 +2,75 @@ from icalendar import Calendar
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+import re
 
+async def get_ctf_details(url):
+    async with ClientSession() as session:
+        async with session.get(url) as response:
+            html_content = await response.text()
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # Extract event name - required field
+            event_name = soup.find('h2').text.strip()
+            
+            # Get rating weight - handle potential missing field
+            try:
+                weight_element = soup.find(text=re.compile('Rating weight:'))
+                weight = weight_element.parent.text.split(':')[1].strip() if weight_element else "N/A"
+            except:
+                weight = "N/A"
+            
+            # Get total teams - handle potential missing field
+            try:
+                teams_element = soup.find(text=re.compile(r'\d+ teams total'))
+                total_teams = teams_element.split()[0] if teams_element else "0"
+            except:
+                total_teams = "0"
+            
+            # Get official URL - more robust extraction
+            try:
+                official_url = None
+                for p in soup.find_all('p'):
+                    if 'Official URL:' in p.text:
+                        url_tag = p.find('a')
+                        if url_tag and url_tag.get('href'):
+                            official_url = url_tag['href']
+                            break
+                if not official_url:
+                    official_url = "Not provided"
+            except:
+                official_url = "Not provided"
+            
+            # Get description - handle potential missing field
+            try:
+                description_div = soup.find('div', {'id': 'id_description'})
+                description = description_div.text.strip() if description_div else "No description available"
+            except:
+                description = "No description available"
+            
+            return event_name, weight, total_teams, official_url, description
+
+
+def format_time_difference(start_timestamp, end_timestamp):
+    # Calculate difference in seconds
+    diff = int(end_timestamp - start_timestamp)
+    
+    # Calculate days, hours, minutes
+    days = diff // (24 * 3600)
+    remaining = diff % (24 * 3600)
+    hours = remaining // 3600
+    minutes = (remaining % 3600) // 60
+    
+    # Build the string parts, only including non-zero values
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+        
+    return " ".join(parts) if parts else "0m"
 
 async def fetch_ics(url):
     clean_url = url.split('?')[0].rstrip('/')
@@ -40,113 +108,102 @@ def parse_ics(ics_data):
 
 async def get_weekend_ctfs(logger):
     try:
-        # Get next weekend's date range (Friday to Monday)
+        # Get current date and calculate weekend range
         today = datetime.now()
         current_year = today.year
-        friday = today + timedelta(days=(4-today.weekday()) % 7)  # Next Friday
-        weekend_start = datetime(friday.year, friday.month, friday.day)
-        weekend_end = weekend_start + timedelta(days=4)  # Until end of Monday
+        friday = today + timedelta(days=(4-today.weekday()) % 7)
+        weekend_start = datetime(friday.year, friday.month, friday.day).timestamp()
+        # Convert weekend_start back to datetime, add days, then convert to timestamp
+        weekend_end = (datetime.fromtimestamp(weekend_start) + timedelta(days=4)).timestamp()
 
+        # Fetch CTFtime page
         url = f'https://ctftime.org/event/list/?year={current_year}&online=1&format=0&restrictions=0&upcoming=true'
-        
         async with ClientSession() as session:
             async with session.get(url) as response:
                 if response.status != 200:
                     raise Exception(f"Failed to fetch CTFtime page: {response.status}")
-                
                 html = await response.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                
-                ctfs = []
-                for row in soup.select('table.table.table-striped tr'):
-                    if row.find('th'):
-                        continue
-                        
-                    cols = row.find_all('td')
-                    if len(cols) < 6:
-                        continue
 
-                    try:
-                        # Parse event name and link
-                        event_link = cols[0].find('a')
-                        if not event_link:
-                            continue
-                            
-                        # Parse date range
-                        date_str = cols[1].text.strip()
-                        start_date_str = date_str.split('—')[0].strip()
-                        
-                        # Extract date components
-                        day_month = start_date_str.split(',')[0].strip()  # "14 Feb." or "14 Feb"
-                        
-                        # Clean up the date string
-                        day_month = day_month.replace('.', '')  # Remove periods
-                        
-                        # Handle abbreviated month names
-                        month_mappings = {
-                            'Sept': 'Sep',
-                            'March': 'Mar',
-                            'April': 'Apr',
-                            'June': 'Jun',
-                            'July': 'Jul'
-                        }
-                        
-                        for full, abbr in month_mappings.items():
-                            if full in day_month:
-                                day_month = day_month.replace(full, abbr)
-                        
-                        # Parse the date
-                        try:
-                            event_date = datetime.strptime(f"{day_month} {current_year}", "%d %b %Y")
-                        except ValueError as e:
-                            logger.error(f"Could not parse date '{day_month} {current_year}': {e}")
-                            continue
-
-                        # Check if event is this weekend (Friday-Monday)
-                        if weekend_start <= event_date < weekend_end:
-                            # Parse weight from the weight column
-                            weight = 0.0
-                            try:
-                                weight_text = cols[4].text.strip()
-                                if weight_text:
-                                    weight = float(weight_text)
-                            except (ValueError, IndexError) as e:
-                                logger.error(f"Error parsing weight: {e}")
-                                weight = 0.0
-                            
-                            # Parse team count from the notes column
-                            print('-'*20)
-                            print(row)
-                            print('-'*20)
-                            teams_count = 0
-                            try:
-                                teams_cell = cols[-1]
-                                bold_tag = teams_cell.find('b')
-                                if bold_tag:
-                                    teams_count = int(bold_tag.text.strip())
-                            except (ValueError, IndexError) as e:
-                                logger.error(f"Error parsing team count from note column: {e}")
-                                teams_count = 0
-
-                            ctf = {
-                                'name': event_link.text.strip(),
-                                'url': f"https://ctftime.org{event_link['href']}",
-                                'format': cols[2].text.strip(),
-                                'weight': weight,
-                                'teams': teams_count,
-                                'date': event_date.strftime('%A, %B %d'),
-                                'full_date': date_str
-                            }
-                            ctfs.append(ctf)
-                            
-                    except Exception as e:
-                        logger.error(f"Error parsing CTF row: {e}")
-                        continue
-
-                # Sort CTFs by weight and team count
-                ctfs.sort(key=lambda x: (x['weight'], x['teams']), reverse=True)
-                return ctfs
+        # Parse events and filter for weekend
+        events = await parse_weekend_ctfs(html, weekend_start, weekend_end, session, logger)
+        return events
 
     except Exception as e:
         logger.error(f"Error fetching weekend CTFs: {e}")
         raise Exception(f"Error fetching weekend CTFs: {e}")
+
+async def parse_weekend_ctfs(html_content, weekend_start, weekend_end, session, logger):
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # Find the table containing CTF events
+        table = soup.find('table', class_='table table-striped')
+        if not table:
+            logger.error("Could not find CTF events table")
+            return []
+            
+        weekend_events = []
+        
+        # Process each row
+        for row in table.find_all('tr')[1:]:  # Skip header row
+            columns = row.find_all('td')
+            if not columns:
+                continue
+                
+            # Extract event information
+            name_col = columns[0].find('a')
+            if not name_col:
+                continue
+                
+            event_name = name_col.text
+            event_url = f"https://ctftime.org{name_col['href']}"
+            
+            # Fetch and parse ICS data
+            try:
+                ics_data = await fetch_ics(event_url)
+                event_times = parse_ics(ics_data)
+                
+                start_timestamp = event_times['start']
+                end_timestamp = event_times['end']
+                
+                # Check if event occurs during weekend
+                if (start_timestamp >= weekend_end):
+                    break
+                if not (start_timestamp <= weekend_end and end_timestamp >= weekend_start):
+                    continue
+                    
+            except Exception as e:
+                logger.error(f"Error fetching/parsing ICS for {event_name}: {e}")
+                continue
+            
+            # Get event format
+            event_format = columns[2].text.strip()
+            
+            # Get weight (default to 0 if not found or invalid)
+            try:
+                weight = float(columns[4].text.strip() or 0)
+            except ValueError:
+                weight = 0
+                
+            # Get number of teams
+            teams_text = columns[6].find('b').text if columns[6].find('b') else "0"
+            try:
+                num_teams = int(teams_text)
+            except ValueError:
+                num_teams = 0
+                
+            weekend_events.append({
+                'name': event_name,
+                'url': event_url,
+                'format': event_format,
+                'weight': weight,
+                'teams': num_teams,
+                'start': start_timestamp,
+                'end': end_timestamp
+            })
+            
+        return weekend_events
+        
+    except Exception as e:
+        logger.error(f"Error parsing CTF events: {e}")
+        return []

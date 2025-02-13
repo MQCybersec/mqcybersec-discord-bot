@@ -1,11 +1,20 @@
 import sqlite3
+from os import path
 def setup_database():
+    if not path.exists("ctf_bot.db"):
+        with open("ctf_bot.db", "w") as file:
+            file.write("")
+            file.close()
+
     conn = sqlite3.connect('ctf_bot.db')
     c = conn.cursor()
+    
+    # Create table
     c.execute('''CREATE TABLE IF NOT EXISTS reaction_roles
-                 (message_id INTEGER PRIMARY KEY,
-                  role_id INTEGER,
-                  emoji TEXT)''')
+                (message_id INTEGER PRIMARY KEY,
+                role_id INTEGER,
+                emoji TEXT)''')
+    
     conn.commit()
     conn.close()
 

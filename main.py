@@ -484,4 +484,90 @@ async def on_ready():
         error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
         logger.error(f"Error in on_ready:\n{error_traceback}")
 
+@bot.tree.command(
+    name="solved",
+    description="Mark the current thread as solved",
+    guild=discord.Object(id=GUILD_ID)
+)
+async def solved(interaction: discord.Interaction):
+    try:
+        # Check if we're in a thread
+        if not isinstance(interaction.channel, discord.Thread):
+            await interaction.response.send_message("This command can only be used in a thread!", ephemeral=True)
+            return
+
+        thread = interaction.channel
+        parent_channel = thread.parent
+        
+        # Check if the parent channel is in a category
+        if not parent_channel.category:
+            await interaction.response.send_message("This thread's channel is not in a category!", ephemeral=True)
+            return
+            
+        # Check if the category is the current year's CTF category
+        current_year = datetime.now().year
+        if not parent_channel.category.name == f"{current_year} CTFs":
+            await interaction.response.send_message(
+                f"This command can only be used in threads within the '{current_year} CTFs' category!", 
+                ephemeral=True
+            )
+            return
+
+        # Log permissions for debugging
+        thread_perms = thread.permissions_for(interaction.guild.me)
+        parent_perms = parent_channel.permissions_for(interaction.guild.me)
+        logger.info(f"Thread permissions: {thread_perms.value}")
+        logger.info(f"Parent permissions: {parent_perms.value}")
+
+        # Try to join the thread first
+        try:
+            await thread.join()
+        except Exception as e:
+            logger.error(f"Failed to join thread: {e}")
+
+        # Check if we can manage threads
+        if not thread_perms.manage_threads:
+            await interaction.response.send_message(
+                "Bot does not have permission to manage threads!", 
+                ephemeral=True
+            )
+            return
+
+        current_name = thread.name
+        if current_name.startswith('[SOLVED] '):
+            await interaction.response.send_message("This thread is already marked as solved!", ephemeral=True)
+            return
+            
+        new_name = current_name.replace('[SOLVED]', '').strip()
+        new_name = f'[SOLVED] {new_name}'
+
+        try:
+            # Try to update the thread name
+            await thread.edit(
+                name=new_name,
+                reason=f"Marked as solved by {interaction.user.name}"
+            )
+            await interaction.response.send_message("Thread marked as solved!")
+            logger.info(f"Thread '{current_name}' marked as solved by {interaction.user.name}#{interaction.user.discriminator}")
+        except discord.Forbidden:
+            # If we get a Forbidden error, try to join the thread first and then retry
+            try:
+                await thread.join()
+                await thread.edit(
+                    name=new_name,
+                    reason=f"Marked as solved by {interaction.user.name}"
+                )
+                await interaction.response.send_message("Thread marked as solved!")
+                logger.info(f"Thread '{current_name}' marked as solved by {interaction.user.name}#{interaction.user.discriminator} (after joining)")
+            except Exception as e:
+                raise Exception(f"Failed to edit thread even after joining: {str(e)}")
+        
+    except Exception as e:
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"Error in solved command:\n{error_traceback}")
+        await interaction.response.send_message(
+            f"Error marking thread as solved. Please make sure the bot has the necessary permissions and is a member of the thread.",
+            ephemeral=True
+        )
+
 bot.run(TOKEN)

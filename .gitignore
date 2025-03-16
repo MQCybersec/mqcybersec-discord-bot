@@ -3,3 +3,5 @@ ctf_bot.db
 __pycache__/
 .venv/
 logs/
+assignments.json
+challenge_assignments.json

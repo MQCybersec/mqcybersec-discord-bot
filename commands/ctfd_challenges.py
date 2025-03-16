@@ -123,6 +123,53 @@ def truncate_text(text, max_length=1024):
     
     return text[:max_length-3] + "..."
 
+async def get_existing_challenges(channel):
+    """
+    Get a set of existing challenge names from the channel's threads
+    with improved detection for special characters
+    """
+    existing_challenges = set()
+    processed_threads = []
+    
+    # Helper function to normalize challenge names for comparison
+    def normalize_name(name):
+        # Remove special characters, convert to lowercase
+        normalized = re.sub(r'[^\w\s]', '', name).lower()
+        # Remove extra spaces
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        return normalized
+    
+    # Collect all active threads
+    for thread in channel.threads:
+        thread_name = thread.name
+        processed_threads.append(thread_name)
+        
+        # Extract challenge name from thread name - typically in format "[Category] Challenge Name"
+        if "]" in thread_name:
+            # Extract just the challenge name part
+            challenge_name = thread_name.split("]", 1)[1].strip()
+            existing_challenges.add(normalize_name(challenge_name))
+        else:
+            # If no category prefix, just use the whole name
+            existing_challenges.add(normalize_name(thread_name))
+    
+    # Also check archived threads
+    async for thread in channel.archived_threads():
+        thread_name = thread.name
+        processed_threads.append(thread_name)
+        
+        if "]" in thread_name:
+            challenge_name = thread_name.split("]", 1)[1].strip()
+            existing_challenges.add(normalize_name(challenge_name))
+        else:
+            existing_challenges.add(normalize_name(thread_name))
+    
+    # Log for debugging
+    logger.info(f"Found threads: {', '.join(processed_threads)}")
+    logger.info(f"Normalized challenge names: {', '.join(existing_challenges)}")
+    
+    return existing_challenges
+
 def setup(bot, guild_id, check_permissions):
     @bot.tree.command(
         name="ctfdchalls",
@@ -134,7 +181,8 @@ def setup(bot, guild_id, check_permissions):
         url: str,
         username: str,
         password: str,
-        category: str = None
+        category: str = None,
+        only_new: bool = True
     ):
         required_permissions = [
             'view_channel', 'send_messages', 'create_public_threads', 
@@ -164,6 +212,12 @@ def setup(bot, guild_id, check_permissions):
         try:
             await interaction.response.defer(ephemeral=True)
             
+            # Get existing challenges if we're only adding new ones
+            existing_challenges = set()
+            if only_new:
+                existing_challenges = await get_existing_challenges(channel)
+                logger.info(f"Found {len(existing_challenges)} existing challenge threads")
+            
             # Normalize the URL
             if not url.startswith(('http://', 'https://')):
                 url = f"https://{url}"
@@ -189,9 +243,25 @@ def setup(bot, guild_id, check_permissions):
                             await interaction.followup.send(f"No challenges found in category '{category}'.")
                             return
                     
+                    # Identify new challenges
+                    new_challenges = []
+                    for challenge in challenges:
+                        challenge_name = challenge.get('name', '')
+                        normalized_name = re.sub(r'[^\w\s]', '', challenge_name).lower()
+                        normalized_name = re.sub(r'\s+', ' ', normalized_name).strip()
+                        
+                        if not only_new or normalized_name not in existing_challenges:
+                            new_challenges.append(challenge)
+                        else:
+                            logger.info(f"Skipping existing challenge: {challenge_name}")
+                    
+                    if not new_challenges:
+                        await interaction.followup.send("No new challenges found. All challenges already have threads.")
+                        return
+                    
                     # Group challenges by category for reporting
                     challenges_by_category = {}
-                    for challenge in challenges:
+                    for challenge in new_challenges:
                         cat = challenge.get('category', 'Uncategorized')
                         if cat not in challenges_by_category:
                             challenges_by_category[cat] = []
@@ -200,10 +270,15 @@ def setup(bot, guild_id, check_permissions):
                     # Send a summary message to the channel
                     summary_message = []
                     for cat_name, cat_challenges in challenges_by_category.items():
-                        summary_message.append(f"**{cat_name}**: {len(cat_challenges)} challenges")
+                        summary_message.append(f"**{cat_name}**: {len(cat_challenges)} new challenges")
                     
+                    if only_new:
+                        title = f"Fetched new challenges from {url}"
+                    else:
+                        title = f"Fetched all challenges from {url}"
+                        
                     summary_embed = discord.Embed(
-                        title=f"Fetched challenges from {url}",
+                        title=title,
                         description="\n".join(summary_message),
                         color=discord.Color.blue()
                     )
@@ -213,8 +288,8 @@ def setup(bot, guild_id, check_permissions):
                     thread_count = 0
                     failed_count = 0
                     
-                    # Create threads for each challenge
-                    for challenge in challenges:
+                    # Create threads for each new challenge
+                    for challenge in new_challenges:
                         try:
                             # Get more details about the challenge
                             challenge_details = await get_challenge_details(session, url, challenge['id'])
@@ -254,6 +329,18 @@ def setup(bot, guild_id, check_permissions):
                                 inline=True
                             )
                             
+                            challenge_embed.add_field(
+                                name="Points", 
+                                value=str(challenge.get('value', 'Unknown')),
+                                inline=True
+                            )
+                            
+                            challenge_embed.add_field(
+                                name="Solves", 
+                                value=str(challenge.get('solves', 'Unknown')),
+                                inline=True
+                            )
+                            
                             # Add any files as fields
                             if 'files' in challenge_details and challenge_details['files']:
                                 file_links = []
@@ -290,12 +377,19 @@ def setup(bot, guild_id, check_permissions):
                     if not success:
                         cleanup_status = "\nCould not clean up the thread notification messages. Make sure the bot has 'Manage Messages' permission."
                     
-                    status_message = f"Successfully created {thread_count} challenge threads!"
-                    if failed_count > 0:
-                        status_message += f" ({failed_count} challenges failed to create properly)"
+                    if thread_count > 0:
+                        status_message = f"Successfully created {thread_count} new challenge threads!"
+                        if failed_count > 0:
+                            status_message += f" ({failed_count} challenges failed to create properly)"
+                    else:
+                        status_message = "No new challenge threads were created."
+                    
+                    total_message = f"{status_message}{cleanup_status}"
+                    if only_new and len(existing_challenges) > 0:
+                        total_message += f"\nSkipped {len(existing_challenges)} existing challenges."
                     
                     await interaction.followup.send(
-                        f"{status_message}{cleanup_status}",
+                        total_message,
                         ephemeral=True
                     )
                     

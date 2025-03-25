@@ -11,7 +11,7 @@ logger = get_logger()
 
 def setup(bot, guild_id, check_permissions):
     @bot.tree.command(
-        name="addcreds",
+        name="ctf_addcreds",
         description="Add team credentials to an existing CTF channel",
         guild=discord.Object(id=guild_id)
     )

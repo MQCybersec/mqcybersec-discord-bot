@@ -172,7 +172,7 @@ async def get_existing_challenges(channel):
 
 def setup(bot, guild_id, check_permissions):
     @bot.tree.command(
-        name="ctfdchalls",
+        name="ctf_ctfd",
         description="Fetch challenges from a CTFd instance and create threads for each",
         guild=discord.Object(id=guild_id)
     )

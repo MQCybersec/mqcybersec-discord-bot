@@ -11,7 +11,7 @@ logger = get_logger()
 
 def setup(bot, guild_id, check_permissions):
     @bot.tree.command(
-        name="ctfinfo", 
+        name="ctf_info", 
         description="Get details about a CTF time event", 
         guild=discord.Object(id=guild_id)
     )
@@ -50,7 +50,7 @@ def setup(bot, guild_id, check_permissions):
                 embed.set_thumbnail(url=event_image)
             
             if event_info['url']:
-                embed.add_field(name="CTF URL", value=event_info['url'], inline=False)
+                embed.add_field(name="ctf_URL", value=event_info['url'], inline=False)
 
             await interaction.followup.send(embed=embed)
 

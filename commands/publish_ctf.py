@@ -11,7 +11,7 @@ logger = get_logger()
 
 def setup(bot, guild_id, check_permissions):
     @bot.tree.command(
-        name="publishctf",
+        name="ctf_publish",
         description="Publish a CTF channel and make it read-only",
         guild=discord.Object(id=guild_id)
     )

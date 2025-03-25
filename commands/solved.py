@@ -12,7 +12,7 @@ logger = get_logger()
 
 def setup(bot, guild_id, check_permissions):
     @bot.tree.command(
-        name="solved",
+        name="ctf_solve",
         description="Mark the current thread as solved with the flag",
         guild=discord.Object(id=guild_id)
     )

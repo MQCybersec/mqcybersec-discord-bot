@@ -14,7 +14,7 @@ logger = get_logger()
 
 def setup(bot, guild_id, check_permissions):
     @bot.tree.command(
-        name="setupctf",
+        name="ctf_setup",
         description="Setup channels and roles for a CTF from CTFtime or a custom CTF",
         guild=discord.Object(id=guild_id)
     )
@@ -204,7 +204,7 @@ def setup(bot, guild_id, check_permissions):
             )
 
             if event_info['url'] and event_info['url'] != "N/A":
-                embed.add_field(name="CTF URL", value=event_info['url'], inline=False)
+                embed.add_field(name="ctf_URL", value=event_info['url'], inline=False)
 
             # Create the ping content if a role was specified
             ping_content = ""
@@ -232,7 +232,7 @@ def setup(bot, guild_id, check_permissions):
                 channel_embed.set_thumbnail(url=event_image)
             
             if event_info['url'] and event_info['url'] != "N/A":
-                channel_embed.add_field(name="CTF URL", value=event_info['url'], inline=False)
+                channel_embed.add_field(name="ctf_URL", value=event_info['url'], inline=False)
             
             await ctf_channel.send(embed=channel_embed)
 

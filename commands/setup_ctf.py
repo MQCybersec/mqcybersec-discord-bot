@@ -26,7 +26,8 @@ def setup(bot, guild_id, check_permissions):
         channel: discord.TextChannel = None,
         start_time: str = None,
         end_time: str = None,
-        pinged_role: discord.Role = None
+        pinged_role: discord.Role = None,
+        add_texit_bot: bool = True
     ):
         required_permissions = [
             'manage_roles', 'manage_channels', 'view_channel', 
@@ -34,7 +35,6 @@ def setup(bot, guild_id, check_permissions):
             'create_public_threads', 'send_messages_in_threads'
         ]
         
-        # Check permissions
         perm_check = check_permissions(interaction.guild, interaction.guild.me, required_permissions)
         missing_perms = [perm for perm, has_perm in perm_check.items() if not has_perm]
         
@@ -172,6 +172,26 @@ def setup(bot, guild_id, check_permissions):
                         manage_messages=True
                     )
                 }
+                
+                # Check if add texit bot option is enabled and the bot is in the server
+                if add_texit_bot:
+                    texit_bot_id = 510789298321096704  # ID for texit bot
+                    texit_bot_member = interaction.guild.get_member(texit_bot_id)
+                    if texit_bot_member:
+                        # Add texit bot to overwrites with same permissions as the current bot
+                        overwrites[texit_bot_member] = discord.PermissionOverwrite(
+                            view_channel=True,
+                            read_messages=True,
+                            send_messages=True,
+                            create_public_threads=True,
+                            send_messages_in_threads=True,
+                            embed_links=True,
+                            attach_files=True,
+                            add_reactions=True,
+                            manage_messages=True
+                        )
+                        logger.info(f"Added Texit bot permissions for channel {channel_name}")
+                
                 ctf_channel = await interaction.guild.create_text_channel(
                     name=channel_name,
                     category=category,

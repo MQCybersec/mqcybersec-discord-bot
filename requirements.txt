@@ -17,3 +17,4 @@ soupsieve==2.6
 typing_extensions==4.12.2
 tzdata==2025.1
 yarl==1.18.3
+brotli==1.1.0

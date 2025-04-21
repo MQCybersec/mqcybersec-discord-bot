@@ -112,7 +112,7 @@ def setup(bot, guild_id, check_permissions):
                 
                 # Send confirmation in the thread
                 await interaction.response.send_message(
-                    f"✅ Thread marked as solved!"
+                    f"Marked as solved by {interaction.user.name}\nFlag:```{flag}```"
                 )
                 
                 logger.info(f"Thread '{current_name}' marked as solved by {interaction.user.name}#{interaction.user.discriminator}")
@@ -129,7 +129,7 @@ def setup(bot, guild_id, check_permissions):
                     await parent_channel.send(embed=solved_embed)
                     
                     await interaction.response.send_message(
-                        f"✅ Thread marked as solved!"
+                        f"Marked as solved by {interaction.user.name}\nFlag:```{flag}```"
                     )
                     
                     logger.info(f"Thread '{current_name}' marked as solved by {interaction.user.name}#{interaction.user.discriminator} (after joining)")

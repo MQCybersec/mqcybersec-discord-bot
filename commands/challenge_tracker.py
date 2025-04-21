@@ -247,11 +247,11 @@ def setup(bot, guild_id, check_permissions):
     
     # Command to refresh the summary
     @bot.tree.command(
-        name="refreshchallenges",
+        name="ctf_refreshassignment",
         description="Refresh the challenge assignments summary",
         guild=discord.Object(id=guild_id)
     )
-    async def refresh_challenges(interaction: discord.Interaction):
+    async def refresh_assignment(interaction: discord.Interaction):
         try:
             channel = interaction.channel
             
@@ -329,7 +329,7 @@ def setup(bot, guild_id, check_permissions):
                 ephemeral=True
             )
         except Exception as e:
-            logger.error(f"Error in refresh_challenges command: {str(e)}")
+            logger.error(f"Error in refresh_assignment command: {str(e)}")
             await interaction.followup.send(f"An error occurred: {str(e)}", ephemeral=True)
     
     # Handle button interactions

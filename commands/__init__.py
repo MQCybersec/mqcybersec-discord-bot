@@ -10,6 +10,9 @@ def setup_commands(bot, guild_id, check_permissions):
     from . import ctfd_challenges
     from . import challenge_tracker
     from . import addcreds
+    from . import addchall
+    from . import rctf_challenges
+    from . import help_command
     
     ctf_info.setup(bot, guild_id, check_permissions)
     setup_ctf.setup(bot, guild_id, check_permissions)
@@ -19,3 +22,6 @@ def setup_commands(bot, guild_id, check_permissions):
     ctfd_challenges.setup(bot, guild_id, check_permissions)
     challenge_tracker.setup(bot, guild_id, check_permissions)
     addcreds.setup(bot, guild_id, check_permissions)
+    addchall.setup(bot, guild_id, check_permissions)
+    rctf_challenges.setup(bot, guild_id, check_permissions)
+    help_command.setup(bot,guild_id, check_permissions)

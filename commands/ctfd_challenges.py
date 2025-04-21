@@ -377,19 +377,52 @@ def setup(bot, guild_id, check_permissions):
                     if not success:
                         cleanup_status = "\nCould not clean up the thread notification messages. Make sure the bot has 'Manage Messages' permission."
                     
-                    if thread_count > 0:
-                        status_message = f"Successfully created {thread_count} new challenge threads!"
-                        if failed_count > 0:
-                            status_message += f" ({failed_count} challenges failed to create properly)"
-                    else:
-                        status_message = "No new challenge threads were created."
+                    # Create a well-formatted summary embed for the public channel
+                    result_embed = discord.Embed(
+                        title="Challenge Import Complete",
+                        color=discord.Color.green() if thread_count > 0 else discord.Color.orange()
+                    )
                     
-                    total_message = f"{status_message}{cleanup_status}"
+                    # Add basic stats
+                    result_embed.add_field(
+                        name="Summary",
+                        value=f"✅ **{thread_count}** new challenge threads created\n" + 
+                              (f"⚠️ **{failed_count}** challenges failed\n" if failed_count > 0 else "") +
+                              (f"⏭️ **{len(existing_challenges)}** existing challenges skipped" if only_new and len(existing_challenges) > 0 else ""),
+                        inline=False
+                    )
+                    
+                    # Add source information
+                    result_embed.add_field(
+                        name="Source",
+                        value=f"{url}",
+                        inline=True
+                    )
+                    
+                    # Add cleanup status if applicable
+                    if not success:
+                        result_embed.add_field(
+                            name="⚠️ Notice",
+                            value="Could not clean up thread notification messages. Make sure the bot has 'Manage Messages' permission.",
+                            inline=False
+                        )
+                    
+                    # Set footer with timestamp
+                    result_embed.set_footer(text=f"Imported by {interaction.user.display_name}")
+                    result_embed.timestamp = discord.utils.utcnow()
+                    
+                    # Send the results embed to the channel
+                    await channel.send(embed=result_embed)
+                    
+                    # Create a simple message for the ephemeral response
+                    simple_message = f"Successfully created {thread_count} new challenge threads!"
+                    if failed_count > 0:
+                        simple_message += f" ({failed_count} challenges failed to create properly)"
                     if only_new and len(existing_challenges) > 0:
-                        total_message += f"\nSkipped {len(existing_challenges)} existing challenges."
+                        simple_message += f" Skipped {len(existing_challenges)} existing challenges."
                     
                     await interaction.followup.send(
-                        total_message,
+                        simple_message,
                         ephemeral=True
                     )
                     

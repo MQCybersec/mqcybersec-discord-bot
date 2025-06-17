@@ -7,7 +7,7 @@ services:
       - ./.env:/app/.env:ro
       - ./ctf_bot.db:/app/ctf_bot.db
       - ./logs:/app/logs
-      - ./assigments.json:/app/assignments.json
+      - ./assignments.json:/app/assignments.json
       - ./challenge_assignments.json:/app/challenge_assignments.json
     environment:
       - PYTHONUNBUFFERED=1
